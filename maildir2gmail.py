@@ -2,15 +2,18 @@
 
 """Upload email messages from a list of Maildir to Google Mail."""
 
+# https://github.com/runpaint/maildir2gmail/blob/master/maildir2gmail.py
+
 __version__ = '0.1'
 
+import traceback
 import email
 import email.Header
 import email.Utils
 import os
 import sys
 import time
-
+from datetime import date
 
 class Gmail(object):
     def __init__(self, options):
@@ -47,21 +50,27 @@ class Gmail(object):
 
         content = open(filename, 'rb').read()
         if content.endswith('\x00\x00\x00'):
-            log('Skipping "%s" - corrupted' % os.path.basename(filename))
+            logerr('Skipping "%s" - corrupted' % os.path.basename(filename))
             return
 
         message = email.message_from_string(content)
         timestamp = parsedate(message['date'])
-        if not timestamp:
-            log('Skipping "%s" - no date' % os.path.basename(filename))
-            return
+        if not timestamp:      
+            #logerr('Error "%s" - no date. Ignoring date' % os.path.basename(filename))
+            #timestamp = parsedate("Sun, 1 Jan 2012 00:00:00 +0000")
+            timestamp = parsedate(date.today().ctime())
+            #return
 
         subject = decode_header(message['subject'])
-        log('Sending "%s" (%d bytes)' % (subject, len(content)))
+        log('Sending "%s" "%s" (%d bytes)' % (os.path.basename(filename), subject, len(content)))
         del message
 
         self.imap.append(self.folder, '(\\Seen)', timestamp, content)
         self.mark_appended(filename)
+        
+        #log('Borrando... ' + filename)
+        #os.rename(filename, filename + '.enviado')
+        os.remove(filename)
     
     def check_appended(self, filename):
         return os.path.basename(filename) in self.database
@@ -118,7 +127,9 @@ def encode_unicode(value):
 
 def log(message):
     print '[%s]: %s' % (time.strftime('%H:%M:%S'), encode_unicode(message))
-
+    
+def logerr(message):
+    print >> sys.stderr, '[%s]: %s' % (time.strftime('%H:%M:%S'), encode_unicode(message))     
 
 def main():
     from optparse import OptionParser
@@ -146,8 +157,11 @@ def main():
                 try:
                     gmail.append(filename)
                 except:
-                    log('Unable to send %s' % filename)
-                    raise
+                    logerr('Unable to send %s' % filename)
+                    logerr(traceback.format_exc())
+                    # Procesamos el siguiente
+                    #raise
+                    
 
 
 def parsedate(value):
